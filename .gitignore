@@ -1,0 +1,15 @@
+build/
+out/
+packages/
+artifact-output/
+*.elf
+*.bin
+*.hex
+src/font_aa.bin
+src/font_aa_metrics.h
+music/.gitkeep
+covers/.gitkeep
+image/.gitkeep
+__pycache__/
+*.pyc
+.DS_Store

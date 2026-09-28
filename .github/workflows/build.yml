@@ -1,0 +1,313 @@
+# SPDX-License-Identifier: MIT
+name: Build AudioC0re
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Create a GitHub Release with artifacts'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential binutils file python3 xxd \
+            python3-pil python3-yaml ffmpeg curl zip unzip \
+            fonts-dejavu-core
+
+      - name: Verify toolchain
+        run: |
+          gcc --version | head -n1
+          ld --version | head -n1
+          objcopy --version | head -n1
+          make --version | head -n1
+          python3 --version
+          python3 -c "import PIL; print('Pillow', PIL.__version__)"
+          ffmpeg -version | head -n1
+          ls -l /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+
+      - name: Bake anti-aliased font
+        run: |
+          python3 tools/bake_font.py
+          echo "---- baked files ----"
+          ls -lh src/font_aa.bin src/font_aa_metrics.h
+
+      - name: Clean before build
+        run: |
+          rm -rf build out packages pkg_* artifact-output
+          rm -f audioC0re.elf audioC0re.bin audioC0re.hex
+          rm -f audioC0re*.zip
+
+      - name: Build shellcode
+        run: bash build.sh
+
+      - name: Inspect artifacts
+        run: |
+          echo "=== Build artifacts ==="
+          ls -lh audioC0re.elf audioC0re.bin audioC0re.hex
+          echo "---- ELF header ----"      ; readelf -h audioC0re.elf
+          echo "---- Program headers ----" ; readelf -l audioC0re.elf
+          echo "---- Section headers ----" ; readelf -S audioC0re.elf
+          echo "---- Hex size ----"        ; wc -c audioC0re.hex
+
+      - name: Build library if music exists
+        id: build_lib
+        run: |
+          found=0
+          for ext in mp3 flac wav m4a aac ogg opus wma; do
+            if ls music/*.$ext >/dev/null 2>&1; then
+              found=1
+              break
+            fi
+          done
+
+          if [ "$found" -eq 1 ]; then
+            python3 tools/build_library.py --root . --out out
+            echo "have_library=true" >> "$GITHUB_OUTPUT"
+            echo "=== Library output ==="
+            ls -lh out/ 2>/dev/null || true
+            ls -lh out/cover/ 2>/dev/null | head -n 5 || true
+            ls -lh out/audio/ 2>/dev/null | head -n 5 || true
+          else
+            echo "have_library=false" >> "$GITHUB_OUTPUT"
+            echo "No music files found — skipping library-dependent packages."
+          fi
+
+      # -----------------------------------------------------------------
+      # Package 1: audioC0re.zip  (shellcode only)
+      # -----------------------------------------------------------------
+      - name: Package 1 — shellcode
+        run: |
+          set -e
+          rm -rf pkg_audioC0re
+          mkdir -p pkg_audioC0re
+
+          cp audioC0re.elf audioC0re.bin audioC0re.hex pkg_audioC0re/
+          [ -f audioC0re.lua ]         && cp audioC0re.lua         pkg_audioC0re/
+          [ -f audioC0re_launcher.py ] && cp audioC0re_launcher.py pkg_audioC0re/
+
+          cd pkg_audioC0re
+          zip -r ../audioC0re.zip .
+          cd ..
+
+          echo "---- audioC0re.zip ----"
+          unzip -l audioC0re.zip
+
+      # -----------------------------------------------------------------
+      # Package 2: audioC0re-library.zip  (full library)
+      # -----------------------------------------------------------------
+      - name: Package 2 — full library
+        if: steps.build_lib.outputs.have_library == 'true'
+        run: |
+          set -e
+          rm -rf pkg_library
+          mkdir -p pkg_library/library
+
+          [ -f audioC0re.lua ]         && cp audioC0re.lua         pkg_library/
+          [ -f audioC0re_launcher.py ] && cp audioC0re_launcher.py pkg_library/
+
+          cp -a out/. pkg_library/library/
+
+          cd pkg_library
+          zip -r ../audioC0re-library.zip .
+          cd ..
+
+          echo "---- audioC0re-library.zip ----"
+          unzip -l audioC0re-library.zip | head -n 30
+
+      # -----------------------------------------------------------------
+      # Package 3: audioC0re-bundle.zip  (shellcode + full library)
+      # -----------------------------------------------------------------
+      - name: Package 3 — bundle
+        if: steps.build_lib.outputs.have_library == 'true'
+        run: |
+          set -e
+          rm -rf pkg_bundle
+          mkdir -p pkg_bundle/bundle/audioC0re
+          mkdir -p pkg_bundle/bundle/library
+
+          [ -f audioC0re.lua ]         && cp audioC0re.lua         pkg_bundle/
+          [ -f audioC0re_launcher.py ] && cp audioC0re_launcher.py pkg_bundle/
+
+          cp audioC0re.elf audioC0re.bin audioC0re.hex pkg_bundle/bundle/audioC0re/
+          cp -a out/. pkg_bundle/bundle/library/
+
+          cd pkg_bundle
+          zip -r ../audioC0re-bundle.zip .
+          cd ..
+
+          echo "---- audioC0re-bundle.zip ----"
+          unzip -l audioC0re-bundle.zip | head -n 30
+
+      # -----------------------------------------------------------------
+      # Package 4: audioC0re-library-empty.zip
+      #   Skeleton — no per-track audio or covers, only what the shell
+      #   needs to reach the grid.  User can drop their own .pcm and
+      #   .bin files into library/audio/ and library/cover/ afterwards.
+      # -----------------------------------------------------------------
+      - name: Package 4 — empty library skeleton
+        if: steps.build_lib.outputs.have_library == 'true'
+        run: |
+          set -e
+          rm -rf pkg_library_empty
+          mkdir -p pkg_library_empty/library/image
+          mkdir -p pkg_library_empty/library/cover
+          mkdir -p pkg_library_empty/library/audio
+
+          [ -f audioC0re.lua ]         && cp audioC0re.lua         pkg_library_empty/
+          [ -f audioC0re_launcher.py ] && cp audioC0re_launcher.py pkg_library_empty/
+
+          cp out/manifest.bin  pkg_library_empty/library/
+          cp out/manifest.json pkg_library_empty/library/
+
+          if [ -d out/image ]; then
+            cp -a out/image/. pkg_library_empty/library/image/
+          fi
+
+          if [ -f out/cover/_default.bin ]; then
+            cp out/cover/_default.bin pkg_library_empty/library/cover/
+          fi
+
+          # Keep audio/ and cover/ present in the zip even when empty
+          touch pkg_library_empty/library/audio/.gitkeep
+          touch pkg_library_empty/library/cover/.gitkeep
+
+          cd pkg_library_empty
+          zip -r ../audioC0re-library-empty.zip .
+          cd ..
+
+          echo "---- audioC0re-library-empty.zip ----"
+          unzip -l audioC0re-library-empty.zip
+
+      # -----------------------------------------------------------------
+      # Package 5: audioC0re-library-media.zip
+      #   Only the per-track audio and cover files.  Extract on top of
+      #   Package 4 to complete a library.
+      # -----------------------------------------------------------------
+      - name: Package 5 — media only
+        if: steps.build_lib.outputs.have_library == 'true'
+        run: |
+          set -e
+          rm -rf pkg_library_media
+          mkdir -p pkg_library_media/library/audio
+          mkdir -p pkg_library_media/library/cover
+
+          [ -f audioC0re.lua ]         && cp audioC0re.lua         pkg_library_media/
+          [ -f audioC0re_launcher.py ] && cp audioC0re_launcher.py pkg_library_media/
+
+          if [ -d out/audio ]; then
+            for f in out/audio/*; do
+              [ -e "$f" ] || continue
+              cp -a "$f" pkg_library_media/library/audio/
+            done
+          fi
+
+          if [ -d out/cover ]; then
+            for f in out/cover/*; do
+              [ -e "$f" ] || continue
+              base=$(basename "$f")
+              if [ "$base" = "_default.bin" ]; then
+                continue
+              fi
+              cp -a "$f" pkg_library_media/library/cover/
+            done
+          fi
+
+          cd pkg_library_media
+          zip -r ../audioC0re-library-media.zip .
+          cd ..
+
+          echo "---- audioC0re-library-media.zip ----"
+          unzip -l audioC0re-library-media.zip | head -n 30
+
+      - name: Summary of generated packages
+        run: |
+          echo "===== Generated ZIP files ====="
+          ls -lh audioC0re*.zip
+
+      # -----------------------------------------------------------------
+      # Artifact staging
+      # -----------------------------------------------------------------
+      - name: Prepare artifact directories
+        run: |
+          rm -rf artifact-output
+          mkdir -p artifact-output/audioC0re
+          mkdir -p artifact-output/audioC0re-library
+          mkdir -p artifact-output/audioC0re-bundle
+          mkdir -p artifact-output/audioC0re-library-empty
+          mkdir -p artifact-output/audioC0re-library-media
+
+          cp audioC0re.zip artifact-output/audioC0re/
+          [ -f audioC0re-library.zip ]       && cp audioC0re-library.zip       artifact-output/audioC0re-library/
+          [ -f audioC0re-bundle.zip ]        && cp audioC0re-bundle.zip        artifact-output/audioC0re-bundle/
+          [ -f audioC0re-library-empty.zip ] && cp audioC0re-library-empty.zip artifact-output/audioC0re-library-empty/
+          [ -f audioC0re-library-media.zip ] && cp audioC0re-library-media.zip artifact-output/audioC0re-library-media/
+
+      - name: Upload shellcode package
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioC0re-package
+          path: artifact-output/audioC0re/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload full library package
+        if: steps.build_lib.outputs.have_library == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioC0re-library-package
+          path: artifact-output/audioC0re-library/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload bundle package
+        if: steps.build_lib.outputs.have_library == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioC0re-bundle-package
+          path: artifact-output/audioC0re-bundle/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload empty library package
+        if: steps.build_lib.outputs.have_library == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioC0re-library-empty-package
+          path: artifact-output/audioC0re-library-empty/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload media-only package
+        if: steps.build_lib.outputs.have_library == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioC0re-library-media-package
+          path: artifact-output/audioC0re-library-media/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish release
+        if: ${{ inputs.publish_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ac0re-${{ github.run_number }}
+          name: "AudioC0re build #${{ github.run_number }}"
+          files: |
+            audioC0re.zip
+            audioC0re-library.zip
+            audioC0re-bundle.zip
+            audioC0re-library-empty.zip
+            audioC0re-library-media.zip
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

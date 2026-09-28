@@ -1,0 +1,35 @@
+name: Reset Repository History
+
+on:
+  workflow_dispatch:
+
+jobs:
+  reset-history:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git User
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Reinitialize Git History
+        run: |
+          # Create an orphan branch with no history
+          git checkout --orphan clean-history
+          
+          # Stage all files exactly as they are
+          git add -A
+          
+          # Commit current state
+          git commit -m "Initial commit"
+          
+          # Force overwrite the main branch with the single clean commit
+          git push origin clean-history:main --force

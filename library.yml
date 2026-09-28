@@ -1,0 +1,34 @@
+defaults:
+  sort: added_desc
+  title_case: as_is
+
+overrides:
+  daft_punk_-_get_lucky:
+    title:  "Get Lucky"
+    artist: "Daft Punk"
+    sort:   1
+
+  gorillaz_-_feel_good_inc:
+    title:  "Feel Good Inc."
+    artist: "Gorillaz"
+
+  kavinsky_-_nightcall:
+    title: "Nightcall"
+
+  some_test_clip:
+    hidden: true
+
+  tycho_-_awake:
+    title:  "Awake"
+    artist: "Tycho"
+    sort:   1
+
+  boards_of_canada_-_roygbiv:
+    title:  "Roygbiv"
+    artist: "Boards of Canada"
+    sort:   1
+
+  aphex_twin_-_xtal:
+    title:  "Xtal"
+    artist: "Aphex Twin"
+    sort:   2
