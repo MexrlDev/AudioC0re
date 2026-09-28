@@ -6,20 +6,20 @@ shellcode on PS4/PS5 via LuaC0re...
 ---
 ## Screenshots
 
-<img src=".Images/main-menu.png" width="600">
+<img src=".images/IMG_1235.png" width="600">
 
 <details>
 <summary>More Screenshots</summary>
 
-<img src=".Images/player.png" width="600">
+<img src=".images/IMG_1236.png" width="600">
 
 ---
 
-<img src=".Images/library.png" width="600">
+<img src=".images/IMG_1237.png" width="600">
 
 ---
 
-<img src=".Images/splash.png" width="600">
+<img src=".images/IMG_1238.png" width="600">
 
 </details>
 
@@ -34,7 +34,7 @@ shellcode on PS4/PS5 via LuaC0re...
 | ------ | -------- |
 | Cross (X) | Select in menu, Pause/Play or use after skipping time in player or Skip intro |
 | Circle (O) | Back |
-| D-Pad | Negative (menu) skip backward/forward (Player) and Up/Down in player controls volume up or down |
+| D-Pad | Negative (menu) skip backward/forward (Player) and Up/Down in player controls volume up or down | Options | Quit to luac0re (in menu |
 
 ---
 ## Requirements
