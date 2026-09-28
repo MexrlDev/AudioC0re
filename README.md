@@ -1,7 +1,6 @@
 # AudioC0re
 
-A music browser and player
-shellcode on PS4/PS5 via LuaC0re...
+A music browser and player on PS4/PS5 via LuaC0re...
 
 ---
 ## Screenshots
