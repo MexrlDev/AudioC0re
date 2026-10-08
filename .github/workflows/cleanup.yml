@@ -9,7 +9,7 @@ jobs:
   delete-old-runs:
     runs-on: ubuntu-latest
     permissions:
-      actions: write  # Required to list and delete workflow runs
+      actions: write
       contents: read
     steps:
       - name: Delete all workflow runs except the latest one
@@ -17,4 +17,4 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          keep: 1  # Keeps only the most recent run per workflow
+          keep_minimum_runs: 1  # Keeps only the most recent run per workflow
