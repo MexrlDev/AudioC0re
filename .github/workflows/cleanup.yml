@@ -1,19 +1,51 @@
-name: Delete ALL Workflow Runs
+name: Force Delete All Workflow Runs
 
 on:
   workflow_dispatch:  # Manual trigger only
 
 jobs:
-  delete-all-runs:
+  force-delete-runs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: read
     steps:
-      - name: Delete all workflow runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository }}
-          keep_minimum_runs: 0          # 0 = delete every run
-          delete_workflow_pattern: '*'  # target all workflows
+      - name: Delete All Workflow Runs via API
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "Fetching all workflow runs..."
+          # Fetch up to 100 runs per page (max allowed)
+          RUNS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/actions/runs?per_page=100")
+          
+          # Extract run IDs using jq
+          RUN_IDS=$(echo "$RUNS" | jq -r '.workflow_runs[].id')
+          
+          if [ -z "$RUN_IDS" ]; then
+            echo "No runs found to delete."
+            exit 0
+          fi
+
+          echo "Found the following run IDs:"
+          echo "$RUN_IDS"
+
+          # Loop through each ID and delete it
+          for RUN_ID in $RUN_IDS; do
+            echo "Deleting run ID: $RUN_ID"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/$REPO/actions/runs/$RUN_ID")
+            
+            if [ "$HTTP_CODE" -eq 204 ]; then
+              echo "  ✅ Success (204)"
+            elif [ "$HTTP_CODE" -eq 403 ]; then
+              echo "  ❌ Forbidden (403) - Token lacks permissions or run is protected."
+            elif [ "$HTTP_CODE" -eq 404 ]; then
+              echo "  ⚠️ Not Found (404) - Run may belong to a deleted workflow. Skipping."
+            else
+              echo "  ❌ Failed with HTTP $HTTP_CODE"
+            fi
+          done
+          echo "Cleanup attempt finished."
