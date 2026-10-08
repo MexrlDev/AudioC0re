@@ -1,20 +1,19 @@
-name: Delete Old Workflow Runs (Keep Latest Only)
+name: Delete ALL Workflow Runs
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 4 * * *'  # Runs daily at 4 AM UTC
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
-  delete-old-runs:
+  delete-all-runs:
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: read
     steps:
-      - name: Delete all workflow runs except the latest one
+      - name: Delete all workflow runs
         uses: Mattraks/delete-workflow-runs@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          keep_minimum_runs: 1  # Keeps only the most recent run per workflow
+          keep_minimum_runs: 0          # 0 = delete every run
+          delete_workflow_pattern: '*'  # target all workflows
